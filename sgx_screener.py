@@ -60,7 +60,7 @@ SGX_UNIVERSE = [
     "9CI.SI",  # CapitaLand Investment
     "BS6.SI",  # Yangzijiang Shipbuilding
     "5E2.SI",  # Seatrium
-    "T39.SI",  # UOL Group
+    "U14.SI",  # UOL Group
     "AJBU.SI", # Keppel DC REIT
 ]
 
@@ -227,7 +227,7 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
 # ---------------------------------------------------------------------------
 # 6. Runner
 # ---------------------------------------------------------------------------
-def run_screen(universe=None, min_fa_score=2, min_ta_score=2) -> pd.DataFrame:
+def run_screen(universe=None, min_fa_score=1, min_ta_score=1) -> pd.DataFrame:
     universe = universe or SGX_UNIVERSE
     raw = []
     for tk in universe:

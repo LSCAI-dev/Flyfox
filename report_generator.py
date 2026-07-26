@@ -190,6 +190,18 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     padding: 10px 0; margin-bottom: 12px;
   }}
 
+  .empty-state {{ text-align: center; padding: 48px 24px; }}
+  .empty-icon {{ font-size: 28px; color: var(--muted); margin-bottom: 12px; }}
+  .empty-title {{
+    font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;
+    margin-bottom: 10px;
+  }}
+  .empty-body {{ color: var(--muted); font-size: 13.5px; line-height: 1.6; max-width: 480px; margin: 0 auto; }}
+  .empty-body code {{
+    font-family: 'IBM Plex Mono', monospace; font-size: 12px;
+    background: rgba(255,255,255,0.06); padding: 2px 5px; border-radius: 4px;
+  }}
+
   footer {{ margin-top: 36px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }}
 </style>
 </head>
@@ -220,13 +232,31 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 """
 
 
+EMPTY_STATE_HTML = """
+<div class="card empty-state">
+  <div class="empty-icon">—</div>
+  <div class="empty-title">No candidates cleared every filter today</div>
+  <p class="empty-body">
+    That's normal — the screen requires fundamental strength AND a live technical
+    trigger AND a 2:1 reward-to-risk at the same time, so some days nothing qualifies.
+    Check back tomorrow, or loosen <code>min_fa_score</code> / <code>min_ta_score</code> /
+    <code>MIN_RR</code> in <code>sgx_screener.py</code> to see near-misses.
+  </p>
+</div>
+"""
+
+
 def build_report(df: pd.DataFrame, out_path: str = "sgx_report.html", demo: bool = False):
-    cards = []
-    for _, row in df.iterrows():
-        print(f"  building chart for {row['Ticker']}...")
-        cards.append(_card_html(row, demo=demo))
-    cards = "\n".join(cards)
-    avg_rr = df["R:R"].mean() if len(df) else 0
+    if len(df) == 0:
+        cards = EMPTY_STATE_HTML
+        avg_rr = 0
+    else:
+        card_list = []
+        for _, row in df.iterrows():
+            print(f"  building chart for {row['Ticker']}...")
+            card_list.append(_card_html(row, demo=demo))
+        cards = "\n".join(card_list)
+        avg_rr = df["R:R"].mean()
     html = PAGE_TEMPLATE.format(
         date=dt.date.today().strftime("%d %b %Y"),
         count=len(df), avg_rr=avg_rr, cards=cards,
@@ -244,6 +274,11 @@ if __name__ == "__main__":
     p.add_argument("--csv", default="sgx_watchlist.csv", help="input watchlist CSV path")
     args = p.parse_args()
 
-    df = pd.read_csv(args.csv)
+    try:
+        df = pd.read_csv(args.csv)
+    except pd.errors.EmptyDataError:
+        df = pd.DataFrame(columns=["Ticker", "Name", "Sector", "Price", "Entry",
+                                    "Stop", "Target", "R:R", "FA Score", "TA Score",
+                                    "FA Signals", "TA Signals"])
     path = build_report(df, out_path=args.out, demo=args.demo)
     print(f"Report written to {path}")

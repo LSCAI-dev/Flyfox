@@ -1,0 +1,7 @@
+Ticker,Name,Sector,Price,Entry,Stop,Target,R:R,FA Score,TA Score,FA Signals,TA Signals
+A17U.SI,CapitaLand Ascendas REIT,Real Estate,2.49,2.49,2.415,2.639,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency",MACD bullish cross
+C09.SI,City Developments Limited,Real Estate,7.48,7.48,7.256,8.66,5.26,3,1,"Low P/E vs sector, Revenue growth, Dividend 5y consistency",Volume surge
+V03.SI,Venture Corporation Limited,Technology,16.2,16.2,15.714,18.75,5.25,2,1,"Low debt/equity, Dividend 5y consistency",RSI momentum turn from oversold
+9CI.SI,CapitaLand Investment Limited,Real Estate,2.49,2.49,2.415,2.82,4.42,2,1,"Low debt/equity, Dividend 5y consistency",Volume surge
+U96.SI,Sembcorp Industries Ltd,Utilities,5.27,5.27,5.112,6.65,8.73,1,1,Dividend 5y consistency,RSI momentum turn from oversold
+5E2.SI,Seatrium Ltd,Energy,2.13,2.13,1.93,2.53,2.0,2,1,"Revenue growth, Low debt/equity",Volume surge

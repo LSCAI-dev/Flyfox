@@ -1,7 +1,12 @@
 Ticker,Name,Sector,Price,Entry,Stop,Target,R:R,FA Score,TA Score,FA Signals,TA Signals
-A17U.SI,CapitaLand Ascendas REIT,Real Estate,2.49,2.49,2.415,2.639,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency",MACD bullish cross
-C09.SI,City Developments Limited,Real Estate,7.48,7.48,7.256,8.66,5.26,3,1,"Low P/E vs sector, Revenue growth, Dividend 5y consistency",Volume surge
-V03.SI,Venture Corporation Limited,Technology,16.2,16.2,15.714,18.75,5.25,2,1,"Low debt/equity, Dividend 5y consistency",RSI momentum turn from oversold
-9CI.SI,CapitaLand Investment Limited,Real Estate,2.49,2.49,2.415,2.82,4.42,2,1,"Low debt/equity, Dividend 5y consistency",Volume surge
-U96.SI,Sembcorp Industries Ltd,Utilities,5.27,5.27,5.112,6.65,8.73,1,1,Dividend 5y consistency,RSI momentum turn from oversold
-5E2.SI,Seatrium Ltd,Energy,2.13,2.13,1.93,2.53,2.0,2,1,"Revenue growth, Low debt/equity",Volume surge
+BS6.SI,Yangzijiang Shipbuilding (Holdings) Ltd.,Industrials,4.0,4.0,3.39,5.22,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+AJBU.SI,Keppel DC REIT,Real Estate,2.25,2.25,2.183,2.385,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+C6L.SI,Singapore Airlines Limited,Industrials,7.55,7.55,7.324,8.003,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+O39.SI,Oversea-Chinese Banking Corporation Limited,Financial Services,29.09,29.09,25.28,36.71,2.0,3,1,"Low P/E vs sector, Revenue growth, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+C38U.SI,CapitaLand Integrated Commercial Trust,Real Estate,2.44,2.44,2.367,2.586,2.0,3,1,"Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+U11.SI,United Overseas Bank Limited,Financial Services,43.32,43.32,40.25,49.46,2.0,2,1,"Low P/E vs sector, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+D05.SI,DBS Group Holdings Ltd,Financial Services,73.94,73.94,66.48,88.86,2.0,2,1,"Revenue growth, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+N2IU.SI,Mapletree Pan Asia Commercial Trust,Real Estate,1.33,1.33,1.29,1.41,2.0,2,1,"Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+Y92.SI,Thai Beverage Public Company Limited,Consumer Defensive,0.455,0.455,0.435,0.495,2.0,2,1,"Low P/E vs sector, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+F34.SI,Wilmar International Limited,Consumer Defensive,3.89,3.89,3.67,4.33,2.0,1,1,Dividend 5y consistency,"Uptrend: EMA20>EMA50, both rising"
+BN4.SI,Keppel Ltd.,Industrials,11.45,11.45,10.71,12.93,2.0,1,1,Dividend 5y consistency,"Uptrend: EMA20>EMA50, both rising"

@@ -2,8 +2,8 @@ name: Daily SGX Watchlist
 
 on:
   schedule:
-    # Runs 23:30 UTC = 07:30 SGT, before Singapore market open (09:00 SGT)
-    - cron: "30 23 * * 0-4"   # Sun-Thu UTC covers Mon-Fri SGT mornings
+    # Runs 12:00 UTC = 8:00pm SGT, Mon-Fri (after SGX market close)
+    - cron: "0 12 * * 1-5"
   workflow_dispatch: {}        # lets you trigger it manually from the Actions tab
 
 permissions:

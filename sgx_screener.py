@@ -75,6 +75,7 @@ EMA_FAST, EMA_SLOW = 20, 50   # uptrend gate: EMA_FAST must sit above EMA_SLOW
 TREND_SLOPE_LOOKBACK = 10     # bars used to measure whether each EMA is still rising
 MACD_CROSS_LOOKBACK = 5
 VOLUME_SURGE_MULT = 1.5       # today's vol vs 20d avg vol
+ASK_BID_LOOKBACK = 20         # bars used for the up/down-volume proxy ratio
 SWING_LOW_LOOKBACK = 15       # bars used to find the protective stop level
 DIVIDEND_YEARS_CHECK = 5      # consecutive years of dividends required
 
@@ -99,6 +100,8 @@ class StockResult:
     stop: float = np.nan
     target: float = np.nan
     rr: float = np.nan
+    rel_vol: float = np.nan
+    ask_bid_ratio: float = np.nan
     entry_reason: str = ""
     stop_reason: str = ""
     target_reason: str = ""
@@ -223,10 +226,22 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
         res.ta_flags.append("MACD bullish cross")
         res.ta_score += 1
 
-    avg_vol20 = vol.tail(20).mean()
+    avg_vol20 = vol.iloc[-21:-1].mean()  # prior 20 sessions, excluding today
+    res.rel_vol = float(vol.iloc[-1] / avg_vol20) if avg_vol20 > 0 else np.nan
     if avg_vol20 > 0 and vol.iloc[-1] > VOLUME_SURGE_MULT * avg_vol20:
         res.ta_flags.append("Volume surge")
         res.ta_score += 1
+
+    # Ask/Bid ratio -- Yahoo Finance has no real bid/ask trade classification
+    # (that needs Level 1/2 quote data), so this is a proxy: volume on days
+    # the price closed higher ("buy pressure") vs days it closed lower
+    # ("sell pressure") over the last ASK_BID_LOOKBACK sessions.
+    window = hist.tail(ASK_BID_LOOKBACK + 1)
+    diffs = window["Close"].diff().iloc[1:]
+    vols_in_window = window["Volume"].iloc[1:]
+    buy_vol = vols_in_window[diffs > 0].sum()
+    sell_vol = vols_in_window[diffs < 0].sum()
+    res.ask_bid_ratio = float(buy_vol / sell_vol) if sell_vol > 0 else np.nan
 
     entry = float(close.iloc[-1])
     res.entry_reason = "Last closing price on the day of the scan"
@@ -304,6 +319,8 @@ def run_screen(universe=None, min_fa_score=1, min_ta_score=1) -> pd.DataFrame:
         "R:R": round(r.rr, 2), "FA Score": r.fa_score, "TA Score": r.ta_score,
         "FA Signals": ", ".join(r.fa_flags), "TA Signals": ", ".join(r.ta_flags),
         "Entry Reason": r.entry_reason, "Stop Reason": r.stop_reason, "Target Reason": r.target_reason,
+        "Rel Vol": round(r.rel_vol, 2) if not np.isnan(r.rel_vol) else None,
+        "Ask/Bid Ratio (approx)": round(r.ask_bid_ratio, 2) if not np.isnan(r.ask_bid_ratio) else None,
     } for r in rows])
 
     if not df.empty:

@@ -21,6 +21,11 @@ CARD_TEMPLATE = """
     <div class="rr-badge">{rr:.1f}R</div>
   </div>
 
+  <div class="stats-row">
+    <div class="stat"><span class="stat-label">Rel Vol</span><span class="stat-value">{rel_vol}</span></div>
+    <div class="stat"><span class="stat-label">Ask/Bid<sup>*</sup></span><span class="stat-value">{ask_bid_ratio}</span></div>
+  </div>
+
   <div class="gauge">
     <div class="gauge-track">
       <div class="gauge-risk" style="width:{risk_pct:.2f}%"></div>
@@ -94,8 +99,12 @@ def _card_html(row, demo=False) -> str:
     stop_reason = row["Stop Reason"] if "Stop Reason" in row and pd.notna(row["Stop Reason"]) else "—"
     target_reason = row["Target Reason"] if "Target Reason" in row and pd.notna(row["Target Reason"]) else "—"
 
+    rel_vol = f"{row['Rel Vol']:.2f}x" if "Rel Vol" in row and pd.notna(row["Rel Vol"]) else "—"
+    ask_bid_ratio = f"{row['Ask/Bid Ratio (approx)']:.2f}" if "Ask/Bid Ratio (approx)" in row and pd.notna(row["Ask/Bid Ratio (approx)"]) else "—"
+
     return CARD_TEMPLATE.format(
         ticker=row["Ticker"], name=row["Name"], sector=row["Sector"],
+        rel_vol=rel_vol, ask_bid_ratio=ask_bid_ratio,
         rr=row["R:R"], risk_pct=risk_pct, reward_pct=reward_pct, entry_pct=entry_pct,
         stop=stop, entry=entry, target=target, chart_html=chart_html,
         entry_reason=entry_reason, stop_reason=stop_reason, target_reason=target_reason,
@@ -160,6 +169,17 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
     color: var(--bg); background: var(--bull); padding: 6px 14px; border-radius: 999px;
     height: fit-content;
   }}
+
+  .stats-row {{ display: flex; gap: 20px; margin-bottom: 18px; }}
+  .stat {{
+    display: flex; flex-direction: column; gap: 2px; padding: 8px 14px;
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 8px;
+  }}
+  .stat-label {{
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+  }}
+  .stat-value {{ font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px; }}
 
   .gauge {{ margin-bottom: 18px; }}
   .gauge-track {{
@@ -248,8 +268,12 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <footer>
     Entry = last close · Stop = recent swing low (capped ~3% risk) · Target = greater of 2R or nearest
     swing high. FA filters: P/E below sector median, revenue growth, debt/equity &lt; 100%, 5yr dividend
-    consistency. Every candidate must be in a confirmed uptrend (20-EMA above 50-EMA,
-    both sloping upward). Additional TA triggers: RSI turn from oversold, MACD cross, volume surge.
+    consistency. Every candidate must be in a confirmed uptrend (20-EMA above 50-EMA, both sloping
+    upward) with MACD at or above its signal line. Additional TA triggers: RSI turn from oversold,
+    MACD cross, volume surge. Rel Vol = today's volume ÷ average volume of the prior 20 sessions.
+    <br><sup>*</sup>Ask/Bid is an approximation, not real order-flow data — Yahoo Finance has no
+    bid/ask trade classification, so this proxies buy vs. sell pressure using volume on up-closing
+    days vs. down-closing days over the last 20 sessions.
     This is a screening tool, not investment advice — verify before sizing any position.
   </footer>
 </div>

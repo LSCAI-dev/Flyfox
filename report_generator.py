@@ -5,6 +5,7 @@ build_report(df) and call it directly after run_screen().
 """
 import base64
 import datetime as dt
+from zoneinfo import ZoneInfo
 import pandas as pd
 
 import chart_generator as cg
@@ -31,6 +32,12 @@ CARD_TEMPLATE = """
       <span class="lbl-entry">Entry {entry:.3f}</span>
       <span class="lbl-target">Target {target:.3f}</span>
     </div>
+  </div>
+
+  <div class="reasons">
+    <div class="reason-row"><span class="reason-tag stop">Stop</span> {stop_reason}</div>
+    <div class="reason-row"><span class="reason-tag entry">Entry</span> {entry_reason}</div>
+    <div class="reason-row"><span class="reason-tag target">Target</span> {target_reason}</div>
   </div>
 
   {chart_html}
@@ -83,10 +90,15 @@ def _card_html(row, demo=False) -> str:
 
     chart_html = _chart_data_uri(row["Ticker"], entry, stop, target, demo=demo)
 
+    entry_reason = row["Entry Reason"] if "Entry Reason" in row and pd.notna(row["Entry Reason"]) else "Last closing price"
+    stop_reason = row["Stop Reason"] if "Stop Reason" in row and pd.notna(row["Stop Reason"]) else "—"
+    target_reason = row["Target Reason"] if "Target Reason" in row and pd.notna(row["Target Reason"]) else "—"
+
     return CARD_TEMPLATE.format(
         ticker=row["Ticker"], name=row["Name"], sector=row["Sector"],
         rr=row["R:R"], risk_pct=risk_pct, reward_pct=reward_pct, entry_pct=entry_pct,
         stop=stop, entry=entry, target=target, chart_html=chart_html,
+        entry_reason=entry_reason, stop_reason=stop_reason, target_reason=target_reason,
         fa_chips=_chips(fa_list, "fa"), ta_chips=_chips(ta_list, "ta"),
     )
 
@@ -167,6 +179,19 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .lbl-stop {{ color: var(--risk); }}
   .lbl-target {{ color: var(--bull); }}
 
+  .reasons {{ margin-bottom: 16px; }}
+  .reason-row {{
+    font-size: 12.5px; color: var(--muted); line-height: 1.7;
+  }}
+  .reason-tag {{
+    font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; font-weight: 600;
+    letter-spacing: 0.04em; padding: 1px 6px; border-radius: 4px; margin-right: 6px;
+    display: inline-block; min-width: 46px; text-align: center;
+  }}
+  .reason-tag.stop {{ background: rgba(255,92,106,0.15); color: var(--risk); }}
+  .reason-tag.entry {{ background: rgba(233,237,242,0.1); color: var(--text); }}
+  .reason-tag.target {{ background: rgba(53,212,140,0.15); color: var(--bull); }}
+
   .signals {{ display: flex; gap: 28px; flex-wrap: wrap; }}
   .signal-group {{ display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }}
   .signal-label {{
@@ -223,7 +248,8 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <footer>
     Entry = last close · Stop = recent swing low (capped ~3% risk) · Target = greater of 2R or nearest
     swing high. FA filters: P/E below sector median, revenue growth, debt/equity &lt; 100%, 5yr dividend
-    consistency. TA triggers: 20/50 MA cross, RSI turn from oversold, MACD cross, volume surge.
+    consistency. Every candidate must be in a confirmed uptrend (20-EMA above 50-EMA,
+    both sloping upward). Additional TA triggers: RSI turn from oversold, MACD cross, volume surge.
     This is a screening tool, not investment advice — verify before sizing any position.
   </footer>
 </div>
@@ -257,8 +283,10 @@ def build_report(df: pd.DataFrame, out_path: str = "sgx_report.html", demo: bool
             card_list.append(_card_html(row, demo=demo))
         cards = "\n".join(card_list)
         avg_rr = df["R:R"].mean()
+    sgt_now = dt.datetime.now(ZoneInfo("Asia/Singapore"))
+    generated_str = sgt_now.strftime("%d %b %Y, %I:%M %p SGT").replace(", 0", ", ")
     html = PAGE_TEMPLATE.format(
-        date=dt.date.today().strftime("%d %b %Y"),
+        date=generated_str,
         count=len(df), avg_rr=avg_rr, cards=cards,
     )
     with open(out_path, "w") as f:

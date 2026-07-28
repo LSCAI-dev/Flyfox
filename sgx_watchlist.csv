@@ -1,1 +1,13 @@
-
+Ticker,Name,Sector,Price,Entry,Stop,Target,R:R,FA Score,TA Score,FA Signals,TA Signals
+C6L.SI,Singapore Airlines Limited,Industrials,7.74,7.74,7.49,8.24,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+BS6.SI,YZJ Shipbldg SGD,Industrials,3.94,3.94,3.39,5.04,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+AJBU.SI,Keppel DC REIT,Real Estate,2.27,2.27,2.202,2.406,2.0,4,1,"Low P/E vs sector, Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+O39.SI,Oversea-Chinese Banking Corporation Limited,Financial Services,28.98,28.98,26.21,34.52,2.0,3,1,"Low P/E vs sector, Revenue growth, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+C38U.SI,CapitaLand Integrated Commercial Trust,Real Estate,2.48,2.48,2.39,2.66,2.0,3,1,"Revenue growth, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+H78.SI,Hongkong Land Holdings Limited,Real Estate,7.88,7.88,7.06,9.52,2.0,3,1,"Low P/E vs sector, Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+U11.SI,UOB,Financial Services,42.86,42.86,41.574,45.432,2.0,2,1,"Low P/E vs sector, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+D05.SI,DBS,Financial Services,73.48,73.48,68.37,83.7,2.0,2,1,"Revenue growth, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+Y92.SI,ThaiBev,Consumer Defensive,0.455,0.455,0.435,0.495,2.0,2,1,"Low P/E vs sector, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+N2IU.SI,Mapletree Pan Asia Commercial Trust,Real Estate,1.34,1.34,1.29,1.44,2.0,2,1,"Low debt/equity, Dividend 5y consistency","Uptrend: EMA20>EMA50, both rising"
+BN4.SI,Keppel Ltd.,Industrials,11.62,11.62,10.77,13.32,2.0,1,1,Dividend 5y consistency,"Uptrend: EMA20>EMA50, both rising"
+F34.SI,Wilmar Intl,Consumer Defensive,3.84,3.84,3.725,4.07,2.0,1,1,Dividend 5y consistency,"Uptrend: EMA20>EMA50, both rising"

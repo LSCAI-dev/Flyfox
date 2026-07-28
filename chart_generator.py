@@ -1,6 +1,6 @@
 """
 Candlestick chart with the exact indicators the screener uses:
-  - Price candles + 20/50 day EMAs (overlay)
+  - Price candles + 20/50 day moving averages (overlay)
   - Volume, with a horizontal line at 1.5x the 20d average (surge threshold)
   - RSI(14), with the 35 "oversold" line the screener checks
   - MACD line vs signal line
@@ -79,23 +79,20 @@ def generate_chart(ticker, df, entry=None, stop=None, target=None, out_dir="char
 
 
 def plot(ticker, df, entry=None, stop=None, target=None, out="candlestick_chart.png"):
-    ema20 = df["Close"].ewm(span=20, adjust=False).mean()
-    ema50 = df["Close"].ewm(span=50, adjust=False).mean()
+    ma20 = df["Close"].rolling(20).mean()
+    ma50 = df["Close"].rolling(50).mean()
     rsi14 = rsi(df["Close"])
     macd_line, signal_line = macd(df["Close"])
-    macd_hist = macd_line - signal_line
-    hist_colors = ["#35D48C" if v >= 0 else "#FF5C6A" for v in macd_hist]
     vol_avg20 = df["Volume"].rolling(20).mean()
     surge_line = vol_avg20 * VOLUME_SURGE_MULT
 
     addplots = [
-        mpf.make_addplot(ema20, color="#35D48C", width=1.1, label="EMA20"),
-        mpf.make_addplot(ema50, color="#E8B45C", width=1.1, label="EMA50"),
+        mpf.make_addplot(ma20, color="#35D48C", width=1.1, label="MA20"),
+        mpf.make_addplot(ma50, color="#E8B45C", width=1.1, label="MA50"),
         mpf.make_addplot(surge_line, panel=1, color="#7C8899", linestyle="--", width=0.8),
         mpf.make_addplot(rsi14, panel=2, color="#35D48C", width=1.1, ylabel="RSI"),
         mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color="#FF5C6A", linestyle="--", width=0.8),
-        mpf.make_addplot(macd_hist, type="bar", panel=3, color=hist_colors, alpha=0.5, width=0.7, ylabel="MACD"),
-        mpf.make_addplot(macd_line, panel=3, color="#35D48C", width=1.1),
+        mpf.make_addplot(macd_line, panel=3, color="#35D48C", width=1.1, ylabel="MACD"),
         mpf.make_addplot(signal_line, panel=3, color="#FF5C6A", width=1.1),
     ]
 

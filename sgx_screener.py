@@ -3,10 +3,9 @@ SGX Swing Trade Screener
 ========================
 Scans a universe of SGX-listed stocks, filters on fundamental strength
 (low P/E vs sector, revenue/earnings growth, low debt-to-equity, consistent
-dividends) and requires the stock to be in a confirmed EMA uptrend (20-EMA
-above 50-EMA, both sloping upward), then layers on additional technical
-triggers (RSI momentum turn, MACD crossover, volume surge) before computing
-an entry / stop / target with a minimum 2:1 reward-to-risk ratio.
+dividends) and technical entry timing (MA crossover, RSI momentum turn,
+MACD crossover, volume surge), then computes an entry / stop / target
+with a minimum 2:1 reward-to-risk ratio.
 
 Usage:
     pip install yfinance pandas numpy --break-system-packages
@@ -71,8 +70,7 @@ SGX_UNIVERSE = [
 LOOKBACK = "1y"
 MIN_RR = 2.0                 # minimum reward:risk to include a name
 RSI_OVERSOLD = 35            # RSI level considered "oversold" territory
-EMA_FAST, EMA_SLOW = 20, 50   # uptrend gate: EMA_FAST must sit above EMA_SLOW
-TREND_SLOPE_LOOKBACK = 10     # bars used to measure whether each EMA is still rising
+MA_CROSS_LOOKBACK = 5         # days within which a MA cross must have happened
 MACD_CROSS_LOOKBACK = 5
 VOLUME_SURGE_MULT = 1.5       # today's vol vs 20d avg vol
 SWING_LOW_LOOKBACK = 15       # bars used to find the protective stop level
@@ -99,7 +97,6 @@ class StockResult:
     stop: float = np.nan
     target: float = np.nan
     rr: float = np.nan
-    in_uptrend: bool = False
     notes: str = ""
 
 
@@ -181,35 +178,22 @@ def apply_fa_filters(res: StockResult, sector_pe_median: float):
         res.fa_score += 1
 
 
-def ema_uptrend_check(close: pd.Series):
-    """Mandatory gate: EMA_FAST must sit above EMA_SLOW, and both must be
-    sloping upward over the last TREND_SLOPE_LOOKBACK bars."""
-    ema_fast = close.ewm(span=EMA_FAST, adjust=False).mean()
-    ema_slow = close.ewm(span=EMA_SLOW, adjust=False).mean()
-
-    fast_above_slow = ema_fast.iloc[-1] > ema_slow.iloc[-1]
-    fast_slope = ema_fast.iloc[-1] - ema_fast.iloc[-1 - TREND_SLOPE_LOOKBACK]
-    slow_slope = ema_slow.iloc[-1] - ema_slow.iloc[-1 - TREND_SLOPE_LOOKBACK]
-
-    passes = bool(fast_above_slow and fast_slope > 0 and slow_slope > 0)
-    return passes, ema_fast, ema_slow
-
-
+# ---------------------------------------------------------------------------
+# 5. Technical screen + entry/stop/target
+# ---------------------------------------------------------------------------
 def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
     close = hist["Close"]
     vol = hist["Volume"]
+    ma20 = close.rolling(20).mean()
+    ma50 = close.rolling(50).mean()
     rsi14 = rsi(close, 14)
     macd_line, signal_line = macd(close)
 
-    uptrend_ok, ema_fast, ema_slow = ema_uptrend_check(close)
-    res.in_uptrend = uptrend_ok
-    if uptrend_ok:
-        res.ta_flags.append(f"Uptrend: EMA{EMA_FAST}>EMA{EMA_SLOW}, both rising")
+    if crossed_up_within(ma20, ma50, MA_CROSS_LOOKBACK):
+        res.ta_flags.append("20/50 MA bullish cross")
         res.ta_score += 1
-    else:
-        res.notes = f"Rejected: not in EMA{EMA_FAST}/{EMA_SLOW} uptrend"
 
-    recent_rsi = rsi14.tail(5)
+    recent_rsi = rsi14.tail(MA_CROSS_LOOKBACK)
     if (recent_rsi.min() < RSI_OVERSOLD) and (rsi14.iloc[-1] > recent_rsi.min()):
         res.ta_flags.append("RSI momentum turn from oversold")
         res.ta_score += 1
@@ -272,8 +256,7 @@ def run_screen(universe=None, min_fa_score=1, min_ta_score=1) -> pd.DataFrame:
     for res, hist in raw:
         apply_fa_filters(res, sector_pe_median.get(res.sector, np.nan))
         apply_ta_filters(res, hist)
-        if (res.in_uptrend and res.fa_score >= min_fa_score
-                and res.ta_score >= min_ta_score and res.rr >= MIN_RR):
+        if res.fa_score >= min_fa_score and res.ta_score >= min_ta_score and res.rr >= MIN_RR:
             rows.append(res)
 
     df = pd.DataFrame([{

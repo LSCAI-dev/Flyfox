@@ -223,8 +223,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <footer>
     Entry = last close · Stop = recent swing low (capped ~3% risk) · Target = greater of 2R or nearest
     swing high. FA filters: P/E below sector median, revenue growth, debt/equity &lt; 100%, 5yr dividend
-    consistency. Every candidate must be in a confirmed uptrend (20-EMA above 50-EMA,
-    both sloping upward). Additional TA triggers: RSI turn from oversold, MACD cross, volume surge.
+    consistency. TA triggers: 20/50 MA cross, RSI turn from oversold, MACD cross, volume surge.
     This is a screening tool, not investment advice — verify before sizing any position.
   </footer>
 </div>

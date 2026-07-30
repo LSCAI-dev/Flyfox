@@ -3,7 +3,6 @@ Generates sgx_report.html from a watchlist DataFrame/CSV produced by
 sgx_screener.py. Run standalone against sgx_watchlist.csv, or import
 build_report(df) and call it directly after run_screen().
 """
-import base64
 import datetime as dt
 from zoneinfo import ZoneInfo
 import pandas as pd
@@ -45,7 +44,9 @@ CARD_TEMPLATE = """
     <div class="reason-row"><span class="reason-tag target">Target</span> {target_reason}</div>
   </div>
 
-  {chart_html}
+  <div class="chart-wrap">
+    {chart_html}
+  </div>
 
   <div class="signals">
     <div class="signal-group">
@@ -69,16 +70,14 @@ def _chips(text_list, cls):
     return " ".join(CHIP.format(cls=cls, text=t) for t in text_list)
 
 
-def _chart_data_uri(ticker, entry, stop, target, demo=False, period="9mo") -> str:
-    """Builds the candlestick+indicators chart for one ticker and returns it
-    as a base64 data URI so the report stays a single portable HTML file."""
+def _chart_embed(ticker, entry, stop, target, demo=False, period="9mo") -> str:
+    """Builds the interactive candlestick+indicators chart for one ticker and
+    returns an embeddable HTML snippet (Plotly div + script). Plotly's JS
+    library itself is loaded once via CDN in the page <head>, not per-chart,
+    to keep the report from repeating it for every stock."""
     try:
         hist = cg.load_data(ticker, period=period, demo=demo)
-        tmp_path = f"/tmp/_chart_{ticker.replace('.', '_')}.png"
-        cg.plot(ticker, hist, entry=entry, stop=stop, target=target, out=tmp_path)
-        with open(tmp_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode("ascii")
-        return f'<img class="chart-img" src="data:image/png;base64,{b64}" alt="{ticker} candlestick chart">'
+        return cg.generate_chart_html(ticker, hist, entry=entry, stop=stop, target=target, include_js=False)
     except Exception as e:
         return f'<div class="chart-fallback">Chart unavailable for {ticker}: {e}</div>'
 
@@ -93,7 +92,7 @@ def _card_html(row, demo=False) -> str:
     fa_list = [s.strip() for s in str(row["FA Signals"]).split(",") if s.strip()]
     ta_list = [s.strip() for s in str(row["TA Signals"]).split(",") if s.strip()]
 
-    chart_html = _chart_data_uri(row["Ticker"], entry, stop, target, demo=demo)
+    chart_html = _chart_embed(row["Ticker"], entry, stop, target, demo=demo)
 
     entry_reason = row["Entry Reason"] if "Entry Reason" in row and pd.notna(row["Entry Reason"]) else "Last closing price"
     stop_reason = row["Stop Reason"] if "Stop Reason" in row and pd.notna(row["Stop Reason"]) else "—"
@@ -119,6 +118,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <title>SGX Swing Watchlist — {date}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
 <style>
   :root {{
     --bg: #0A0E14;
@@ -226,9 +226,9 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   }}
   .chip.none {{ color: var(--muted); border-style: dashed; }}
 
-  .chart-img {{
-    width: 100%; display: block; border-radius: 10px;
-    border: 1px solid var(--border); margin-bottom: 18px;
+  .chart-wrap {{
+    border-radius: 10px; border: 1px solid var(--border); margin-bottom: 18px;
+    overflow: hidden; background: var(--bg);
   }}
   .chart-fallback {{
     color: var(--muted); font-size: 12.5px; font-style: italic;
@@ -266,14 +266,18 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   {cards}
 
   <footer>
-    Entry = last close · Stop = recent swing low (capped ~3% risk) · Target = greater of 2R or nearest
-    swing high. FA filters: P/E below sector median, revenue growth, debt/equity &lt; 100%, 5yr dividend
+    Entry = breakout trigger above resistance, pullback at support, or trend-continuation (see each
+    stock's Entry reason). Stop = recent swing low (capped ~3% risk). Target = greater of 2R or nearest
+    resistance. FA filters: P/E below sector median, revenue growth, debt/equity &lt; 100%, 5yr dividend
     consistency. Every candidate must be in a confirmed uptrend (20-EMA above 50-EMA, both sloping
     upward) with MACD at or above its signal line. Additional TA triggers: RSI turn from oversold,
     MACD cross, volume surge. Rel Vol = today's volume ÷ average volume of the prior 20 sessions.
+    VWAP on the chart is a rolling 20-day volume-weighted average (not an intraday session VWAP,
+    since this system uses daily bars).
     <br><sup>*</sup>Ask/Bid is an approximation, not real order-flow data — Yahoo Finance has no
     bid/ask trade classification, so this proxies buy vs. sell pressure using volume on up-closing
     days vs. down-closing days over the last 20 sessions.
+    Charts are interactive — hover to see price/VWAP/volume/RSI/MACD together, scroll to zoom, drag to pan.
     This is a screening tool, not investment advice — verify before sizing any position.
   </footer>
 </div>

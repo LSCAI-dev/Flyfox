@@ -77,6 +77,10 @@ MACD_CROSS_LOOKBACK = 5
 VOLUME_SURGE_MULT = 1.5       # today's vol vs 20d avg vol
 ASK_BID_LOOKBACK = 20         # bars used for the up/down-volume proxy ratio
 SWING_LOW_LOOKBACK = 15       # bars used to find the protective stop level
+RESISTANCE_LOOKBACK = 60      # bars used to find the resistance / breakout level
+BREAKOUT_ZONE_PCT = 0.02      # price within 2% of resistance counts as a breakout setup
+BREAKOUT_TRIGGER_BUFFER = 0.003  # breakout entry trigger sits 0.3% above resistance
+SUPPORT_ZONE_PCT = 0.05       # price within 5% above support counts as a pullback setup
 DIVIDEND_YEARS_CHECK = 5      # consecutive years of dividends required
 
 
@@ -243,10 +247,37 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
     sell_vol = vols_in_window[diffs < 0].sum()
     res.ask_bid_ratio = float(buy_vol / sell_vol) if sell_vol > 0 else np.nan
 
-    entry = float(close.iloc[-1])
-    res.entry_reason = "Last closing price on the day of the scan"
-
+    current_close = float(close.iloc[-1])
     swing_low = float(hist["Low"].tail(SWING_LOW_LOOKBACK).min())
+    swing_high = float(hist["High"].tail(RESISTANCE_LOOKBACK).max())
+    ema20_now = float(ema_fast.iloc[-1])
+
+    # Nearest support below today's price: the tighter (higher) of the recent
+    # swing low or the rising 20-EMA, whichever sits closer to price.
+    support_candidates = [lvl for lvl in (swing_low, ema20_now) if lvl <= current_close]
+    support_level = max(support_candidates) if support_candidates else swing_low
+    support_is_ema = support_candidates and support_level == ema20_now
+
+    near_resistance = current_close >= swing_high * (1 - BREAKOUT_ZONE_PCT)
+    near_support = current_close <= support_level * (1 + SUPPORT_ZONE_PCT)
+
+    if near_resistance:
+        breakout_trigger = swing_high * (1 + BREAKOUT_TRIGGER_BUFFER)
+        entry = max(current_close, breakout_trigger)
+        if entry > current_close:
+            res.entry_reason = (f"Breakout entry: buy-stop just above {RESISTANCE_LOOKBACK}-session "
+                                 f"resistance at {swing_high:.3f}")
+        else:
+            res.entry_reason = (f"Breakout entry: price already clear of {RESISTANCE_LOOKBACK}-session "
+                                 f"resistance at {swing_high:.3f}, confirmed with volume")
+    elif near_support:
+        entry = current_close
+        support_desc = f"rising {EMA_FAST}-EMA" if support_is_ema else f"recent swing low over the last {SWING_LOW_LOOKBACK} sessions"
+        res.entry_reason = f"Pullback entry near support at {support_level:.3f} ({support_desc})"
+    else:
+        entry = current_close
+        res.entry_reason = f"Trend-continuation entry within the confirmed EMA{EMA_FAST}/{EMA_SLOW} uptrend"
+
     risk_floor = entry * 0.97  # cap max risk at ~3% of entry
     # Use whichever stop is CLOSER to entry (i.e. the smaller of the two risk
     # amounts) -- if the technical swing low sits further than 3% away, the
@@ -262,12 +293,11 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
         res.notes = "Could not derive a valid stop (no clear swing low)"
         return
 
-    # Target: at least MIN_RR, but respect the recent swing high if it's further out
-    swing_high = float(hist["High"].tail(60).max())
+    # Target: at least MIN_RR, but respect the resistance level if it's further out
     min_target = entry + MIN_RR * risk
     if swing_high > min_target:
         target = swing_high
-        res.target_reason = "Recent swing high (resistance) over the last 60 sessions"
+        res.target_reason = f"Recent swing high (resistance) over the last {RESISTANCE_LOOKBACK} sessions"
     else:
         target = min_target
         res.target_reason = f"Minimum {MIN_RR:.0f}:1 reward-to-risk from entry and stop"

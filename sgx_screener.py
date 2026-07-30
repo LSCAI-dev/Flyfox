@@ -26,6 +26,7 @@ Notes:
 """
 
 import time
+import json
 import datetime as dt
 from dataclasses import dataclass, field
 
@@ -76,6 +77,8 @@ TREND_SLOPE_LOOKBACK = 10     # bars used to measure whether each EMA is still r
 MACD_CROSS_LOOKBACK = 5
 VOLUME_SURGE_MULT = 1.5       # today's vol vs 20d avg vol
 ASK_BID_LOOKBACK = 20         # bars used for the up/down-volume proxy ratio
+VWAP_WINDOW = 20              # rolling window for VWAP (see vwap_rolling() docstring)
+NEWS_MAX_ITEMS = 3            # recent headlines to attach per stock
 SWING_LOW_LOOKBACK = 15       # bars used to find the protective stop level
 RESISTANCE_LOOKBACK = 60      # bars used to find the resistance / breakout level
 BREAKOUT_ZONE_PCT = 0.02      # price within 2% of resistance counts as a breakout setup
@@ -106,6 +109,9 @@ class StockResult:
     rr: float = np.nan
     rel_vol: float = np.nan
     ask_bid_ratio: float = np.nan
+    vwap: float = np.nan
+    price_vwap_ratio: float = np.nan
+    news: list = field(default_factory=list)
     entry_reason: str = ""
     stop_reason: str = ""
     target_reason: str = ""
@@ -141,6 +147,71 @@ def crossed_up_within(fast: pd.Series, slow: pd.Series, lookback: int) -> bool:
     if len(recent) < 2:
         return False
     return (recent.iloc[:-1].values <= 0).any() and diff.iloc[-1] > 0
+
+
+def vwap_rolling(hist: pd.DataFrame, window: int = VWAP_WINDOW) -> pd.Series:
+    """Rolling N-day volume-weighted average price. True VWAP is an intraday
+    measure that resets every session and needs tick data; since this system
+    works from daily bars, this is the standard swing-trading adaptation --
+    a rolling window VWAP, not a session VWAP."""
+    typical = (hist["High"] + hist["Low"] + hist["Close"]) / 3
+    pv = typical * hist["Volume"]
+    return pv.rolling(window).sum() / hist["Volume"].rolling(window).sum()
+
+
+def fetch_news(ticker: str, max_items: int = NEWS_MAX_ITEMS) -> list:
+    """Pulls recent headlines from Yahoo Finance (via yfinance) for a ticker.
+    This is Yahoo's own aggregated news feed (wire services, press releases,
+    analyst notes, etc.) -- headlines and links only, not an AI-generated
+    synthesis of article content. Coverage for smaller/foreign-exchange
+    tickers like SGX names can be thin, and yfinance's news endpoint has a
+    known history of occasionally returning items for the wrong ticker, so
+    treat this as a pointer to check further rather than gospel."""
+    try:
+        raw = yf.Ticker(ticker).news or []
+    except Exception:
+        return []
+
+    items = []
+    for article in raw:
+        # yfinance's news schema has changed over versions -- some return a
+        # flat dict, newer ones nest the real fields under "content".
+        content = article.get("content") if isinstance(article.get("content"), dict) else article
+
+        title = content.get("title") or article.get("title")
+        if not title:
+            continue
+
+        provider = content.get("provider")
+        if isinstance(provider, dict):
+            publisher = provider.get("displayName", "Unknown")
+        else:
+            publisher = content.get("publisher") or article.get("publisher") or "Unknown"
+
+        link_field = content.get("clickThroughUrl") or content.get("canonicalUrl")
+        if isinstance(link_field, dict):
+            link = link_field.get("url", "")
+        else:
+            link = link_field or article.get("link") or ""
+
+        raw_time = content.get("pubDate") or article.get("providerPublishTime")
+        published = _format_news_time(raw_time)
+
+        items.append({"title": title, "publisher": publisher, "link": link, "published": published})
+        if len(items) >= max_items:
+            break
+    return items
+
+
+def _format_news_time(raw_time) -> str:
+    try:
+        if isinstance(raw_time, (int, float)):
+            return dt.datetime.utcfromtimestamp(raw_time).strftime("%d %b %Y")
+        if isinstance(raw_time, str):
+            return dt.datetime.fromisoformat(raw_time.replace("Z", "+00:00")).strftime("%d %b %Y")
+    except Exception:
+        pass
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +318,12 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
     sell_vol = vols_in_window[diffs < 0].sum()
     res.ask_bid_ratio = float(buy_vol / sell_vol) if sell_vol > 0 else np.nan
 
+    vwap_series = vwap_rolling(hist)
+    current_vwap = float(vwap_series.iloc[-1]) if not np.isnan(vwap_series.iloc[-1]) else np.nan
+    res.vwap = current_vwap
+    res.price = float(close.iloc[-1])
+    res.price_vwap_ratio = float(res.price / current_vwap) if current_vwap and current_vwap > 0 else np.nan
+
     current_close = float(close.iloc[-1])
     swing_low = float(hist["Low"].tail(SWING_LOW_LOOKBACK).min())
     swing_high = float(hist["High"].tail(RESISTANCE_LOOKBACK).max())
@@ -342,15 +419,28 @@ def run_screen(universe=None, min_fa_score=1, min_ta_score=1) -> pd.DataFrame:
                 and res.ta_score >= min_ta_score and res.rr >= MIN_RR):
             rows.append(res)
 
+    # Only fetch news for stocks that actually cleared every gate -- no point
+    # spending extra requests on names we're about to discard.
+    for res in rows:
+        try:
+            res.news = fetch_news(res.ticker)
+            time.sleep(0.2)
+        except Exception as e:
+            print(f"  news fetch failed for {res.ticker}: {e}")
+            res.news = []
+
     df = pd.DataFrame([{
         "Ticker": r.ticker, "Name": r.name, "Sector": r.sector,
-        "Price": round(r.price if not np.isnan(r.price) else r.entry, 3),
+        "Price": round(r.price, 3) if not np.isnan(r.price) else round(r.entry, 3),
         "Entry": round(r.entry, 3), "Stop": round(r.stop, 3), "Target": round(r.target, 3),
         "R:R": round(r.rr, 2), "FA Score": r.fa_score, "TA Score": r.ta_score,
         "FA Signals": ", ".join(r.fa_flags), "TA Signals": ", ".join(r.ta_flags),
         "Entry Reason": r.entry_reason, "Stop Reason": r.stop_reason, "Target Reason": r.target_reason,
         "Rel Vol": round(r.rel_vol, 2) if not np.isnan(r.rel_vol) else None,
         "Ask/Bid Ratio (approx)": round(r.ask_bid_ratio, 2) if not np.isnan(r.ask_bid_ratio) else None,
+        "VWAP": round(r.vwap, 3) if not np.isnan(r.vwap) else None,
+        "Price/VWAP": round(r.price_vwap_ratio, 3) if not np.isnan(r.price_vwap_ratio) else None,
+        "News": json.dumps(r.news),
     } for r in rows])
 
     if not df.empty:

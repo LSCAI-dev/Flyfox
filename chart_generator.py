@@ -174,6 +174,23 @@ def build_figure(ticker, df, entry=None, stop=None, target=None):
     return fig
 
 
+def get_plotly_cdn_script_tag() -> str:
+    """Returns the exact <script> tag for loading Plotly's JS library from
+    its CDN, matching whatever plotly version is actually installed. Used to
+    load Plotly once in the report's page <head> rather than hardcoding a
+    version number that can silently go stale (a wrong/nonexistent version
+    string here causes a 404 and every chart fails with "Plotly is not
+    defined" -- this generates it from the library itself instead)."""
+    import re
+    probe_html = go.Figure().to_html(full_html=False, include_plotlyjs="cdn")
+    match = re.search(r'<script[^>]*src="https://cdn\.plot\.ly[^"]*"[^>]*></script>', probe_html)
+    if not match:
+        # Extremely unlikely fallback -- if plotly's own CDN embed format
+        # ever changes shape entirely, fail loudly rather than silently.
+        raise RuntimeError("Could not determine Plotly CDN script tag from installed plotly version")
+    return match.group(0)
+
+
 def generate_chart_html(ticker, df, entry=None, stop=None, target=None, include_js=False):
     """Returns an HTML snippet (a <div> + <script>) for embedding inline in
     the report. include_js=False (default) assumes Plotly's library is

@@ -163,10 +163,13 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>SGX Swing Watchlist — {date}</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+{plotly_cdn_tag}
 <style>
   :root {{
     --bg: #0A0E14;
@@ -379,6 +382,7 @@ def build_report(df: pd.DataFrame, out_path: str = "sgx_report.html", demo: bool
     html = PAGE_TEMPLATE.format(
         date=generated_str,
         count=len(df), avg_rr=avg_rr, cards=cards,
+        plotly_cdn_tag=cg.get_plotly_cdn_script_tag(),
     )
     with open(out_path, "w") as f:
         f.write(html)

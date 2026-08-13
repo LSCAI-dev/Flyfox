@@ -1,49 +1,26 @@
 """
-Interactive candlestick chart (Plotly) with the exact indicators the
-screener uses:
-  - Price candles + 20/50-day EMAs + rolling VWAP (overlay)
-  - Volume, with a dashed line at 1.5x the prior-20-day average (surge threshold)
+Candlestick chart with the exact indicators the screener uses:
+  - Price candles + 20/50 day EMAs (overlay)
+  - Volume, with a horizontal line at 1.5x the 20d average (surge threshold)
   - RSI(14), with the 35 "oversold" line the screener checks
-  - MACD histogram + MACD line + signal line
-
-Unlike a static image, this is a real interactive chart: moving your mouse
-along it shows a crosshair with a single unified tooltip giving you price
-(OHLC), EMA20/50, VWAP, volume, RSI, and MACD all at that date, across every
-panel at once. You can also scroll-zoom and drag to pan.
+  - MACD line vs signal line
 
 Usage:
-    python chart_generator.py D05.SI --out chart.html
-    python chart_generator.py D05.SI --entry 44.20 --stop 42.85 --target 48.35 --out chart.html
+    python chart_generator.py D05.SI
+    python chart_generator.py D05.SI --entry 44.20 --stop 42.85 --target 48.35
 
 If yfinance can't reach the network (e.g. sandboxed environments), pass
 --demo to plot synthetic sample data instead, purely to preview the layout.
-
-Note on VWAP: true VWAP is an intraday measure that resets every trading
-session, which needs intraday tick data. This chart works from daily bars
-(matching the rest of the swing-trade system), so "VWAP" here is a rolling
-20-day volume-weighted average price -- a common swing-trading approximation,
-not a session VWAP.
 """
 import argparse
-import os
 import numpy as np
 import pandas as pd
 import yfinance as yf
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
+import mplfinance as mpf
+import matplotlib.pyplot as plt
 
 RSI_OVERSOLD = 35
 VOLUME_SURGE_MULT = 1.5
-VWAP_WINDOW = 20
-
-COLOR_BG = "#0A0E14"
-COLOR_GRID = "#1A2230"
-COLOR_TEXT = "#E9EDF2"
-COLOR_MUTED = "#7C8899"
-COLOR_BULL = "#35D48C"
-COLOR_BEAR = "#FF5C6A"
-COLOR_GOLD = "#E8B45C"
-COLOR_VWAP = "#9B8FE8"
 
 
 def rsi(series, period=14):
@@ -64,21 +41,14 @@ def macd(series, fast=12, slow=26, signal=9):
     return macd_line, signal_line
 
 
-def vwap(df, window=VWAP_WINDOW):
-    """Rolling N-day volume-weighted average price (see module docstring for
-    why this is rolling rather than a true intraday session VWAP)."""
-    typical = (df["High"] + df["Low"] + df["Close"]) / 3
-    pv = typical * df["Volume"]
-    return pv.rolling(window).sum() / df["Volume"].rolling(window).sum()
-
-
 def make_demo_data(periods=180, seed=7):
     """Synthetic OHLCV purely to preview chart layout when live data is unreachable."""
     rng = np.random.default_rng(seed)
     dates = pd.bdate_range(end=pd.Timestamp.today().normalize(), periods=periods)
     periods = len(dates)
     rets = rng.normal(0.0006, 0.013, periods)
-    rets[-15:] += 0.004  # bias the last ~15 sessions upward for a visible bullish setup
+    # bias the last ~15 sessions upward to create a visible bullish setup
+    rets[-15:] += 0.004
     close = 40 * np.exp(np.cumsum(rets))
     high = close * (1 + rng.uniform(0.001, 0.012, periods))
     low = close * (1 - rng.uniform(0.001, 0.012, periods))
@@ -98,117 +68,63 @@ def load_data(ticker, period="9mo", demo=False):
     return hist[["Open", "High", "Low", "Close", "Volume"]]
 
 
-def build_figure(ticker, df, entry=None, stop=None, target=None):
+def generate_chart(ticker, df, entry=None, stop=None, target=None, out_dir="charts", period_label=""):
+    """Convenience wrapper used by report_generator.py: builds the chart for
+    one ticker and returns the file path it was saved to."""
+    import os
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, f"{ticker.replace('.', '_')}.png")
+    plot(ticker, df, entry=entry, stop=stop, target=target, out=out_path)
+    return out_path
+
+
+def plot(ticker, df, entry=None, stop=None, target=None, out="candlestick_chart.png"):
     ema20 = df["Close"].ewm(span=20, adjust=False).mean()
     ema50 = df["Close"].ewm(span=50, adjust=False).mean()
-    vwap20 = vwap(df)
     rsi14 = rsi(df["Close"])
     macd_line, signal_line = macd(df["Close"])
     macd_hist = macd_line - signal_line
-    vol_avg20 = df["Volume"].shift(1).rolling(20).mean()  # prior 20 days, excludes today
+    hist_colors = ["#35D48C" if v >= 0 else "#FF5C6A" for v in macd_hist]
+    vol_avg20 = df["Volume"].rolling(20).mean()
     surge_line = vol_avg20 * VOLUME_SURGE_MULT
-    hist_colors = [COLOR_BULL if v >= 0 else COLOR_BEAR for v in macd_hist]
-    vol_colors = [COLOR_BULL if c >= o else COLOR_BEAR for c, o in zip(df["Close"], df["Open"])]
 
-    fig = make_subplots(
-        rows=4, cols=1, shared_xaxes=True,
-        row_heights=[0.5, 0.15, 0.15, 0.2], vertical_spacing=0.03,
+    addplots = [
+        mpf.make_addplot(ema20, color="#35D48C", width=1.1, label="EMA20"),
+        mpf.make_addplot(ema50, color="#E8B45C", width=1.1, label="EMA50"),
+        mpf.make_addplot(surge_line, panel=1, color="#7C8899", linestyle="--", width=0.8),
+        mpf.make_addplot(rsi14, panel=2, color="#35D48C", width=1.1, ylabel="RSI"),
+        mpf.make_addplot([RSI_OVERSOLD] * len(df), panel=2, color="#FF5C6A", linestyle="--", width=0.8),
+        mpf.make_addplot(macd_hist, type="bar", panel=3, color=hist_colors, alpha=0.5, width=0.7, ylabel="MACD"),
+        mpf.make_addplot(macd_line, panel=3, color="#35D48C", width=1.1),
+        mpf.make_addplot(signal_line, panel=3, color="#FF5C6A", width=1.1),
+    ]
+
+    hlines = dict(hlines=[], colors=[], linestyle="-.", linewidths=1.1)
+    if entry:
+        hlines["hlines"].append(entry); hlines["colors"].append("#E9EDF2")
+    if stop:
+        hlines["hlines"].append(stop); hlines["colors"].append("#FF5C6A")
+    if target:
+        hlines["hlines"].append(target); hlines["colors"].append("#35D48C")
+
+    mc = mpf.make_marketcolors(up="#35D48C", down="#FF5C6A", edge="inherit",
+                                wick="inherit", volume={"up": "#2a6b52", "down": "#7a3038"})
+    style = mpf.make_mpf_style(base_mpf_style="nightclouds", marketcolors=mc,
+                                facecolor="#0A0E14", edgecolor="#212A38",
+                                gridcolor="#1A2230", gridstyle="--",
+                                figcolor="#0A0E14", rc={"font.size": 9})
+
+    fig, axes = mpf.plot(
+        df, type="candle", style=style, addplot=addplots,
+        volume=True, panel_ratios=(3, 1, 1, 1),
+        hlines=hlines if hlines["hlines"] else None,
+        title=f"\n{ticker} — Price / Volume / RSI(14) / MACD",
+        figsize=(11, 10), returnfig=True,
     )
-
-    fig.add_trace(go.Candlestick(
-        x=df.index, open=df["Open"], high=df["High"], low=df["Low"], close=df["Close"],
-        name="Price", increasing_line_color=COLOR_BULL, decreasing_line_color=COLOR_BEAR,
-        increasing_fillcolor=COLOR_BULL, decreasing_fillcolor=COLOR_BEAR,
-    ), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=ema20, name="EMA20", mode="lines",
-                              line=dict(color=COLOR_BULL, width=1.3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=ema50, name="EMA50", mode="lines",
-                              line=dict(color=COLOR_GOLD, width=1.3)), row=1, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=vwap20, name=f"VWAP({VWAP_WINDOW})", mode="lines",
-                              line=dict(color=COLOR_VWAP, width=1.3, dash="dot")), row=1, col=1)
-
-    for level, color, label in [(entry, COLOR_TEXT, "Entry"), (stop, COLOR_BEAR, "Stop"), (target, COLOR_BULL, "Target")]:
-        if level:
-            fig.add_hline(y=level, line=dict(color=color, dash="dashdot", width=1.2),
-                          annotation_text=f"{label} {level:.3f}", annotation_position="right",
-                          annotation_font_color=color, row=1, col=1)
-
-    fig.add_trace(go.Bar(x=df.index, y=df["Volume"], name="Volume",
-                          marker_color=vol_colors, opacity=0.7), row=2, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=surge_line, name="Vol surge (1.5x)", mode="lines",
-                              line=dict(color=COLOR_MUTED, dash="dash", width=1)), row=2, col=1)
-
-    fig.add_trace(go.Scatter(x=df.index, y=rsi14, name="RSI(14)", mode="lines",
-                              line=dict(color=COLOR_BULL, width=1.3)), row=3, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=[RSI_OVERSOLD] * len(df), name="Oversold (35)", mode="lines",
-                              line=dict(color=COLOR_BEAR, dash="dash", width=1)), row=3, col=1)
-
-    fig.add_trace(go.Bar(x=df.index, y=macd_hist, name="MACD hist",
-                          marker_color=hist_colors, opacity=0.5), row=4, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=macd_line, name="MACD", mode="lines",
-                              line=dict(color=COLOR_BULL, width=1.3)), row=4, col=1)
-    fig.add_trace(go.Scatter(x=df.index, y=signal_line, name="Signal", mode="lines",
-                              line=dict(color=COLOR_BEAR, width=1.3)), row=4, col=1)
-
-    fig.update_layout(
-        title=dict(text=f"{ticker} — Price / Volume / RSI(14) / MACD", font=dict(size=14)),
-        paper_bgcolor=COLOR_BG, plot_bgcolor=COLOR_BG,
-        font=dict(color=COLOR_TEXT, size=11),
-        showlegend=True,
-        legend=dict(orientation="h", y=1.06, x=0, bgcolor="rgba(0,0,0,0)"),
-        hovermode="x unified",
-        hoverlabel=dict(bgcolor="#121824", font_size=11, bordercolor=COLOR_GRID),
-        margin=dict(l=55, r=60, t=60, b=30),
-        height=820,
-        dragmode="pan",
-    )
-    for i in range(1, 5):
-        fig.update_xaxes(showgrid=True, gridcolor=COLOR_GRID, showspikes=True, spikemode="across",
-                          spikesnap="cursor", spikecolor=COLOR_TEXT, spikethickness=1,
-                          rangeslider_visible=False, row=i, col=1)
-        fig.update_yaxes(showgrid=True, gridcolor=COLOR_GRID, row=i, col=1)
-    fig.update_yaxes(title_text="Price", row=1, col=1)
-    fig.update_yaxes(title_text="Volume", row=2, col=1)
-    fig.update_yaxes(title_text="RSI", row=3, col=1)
-    fig.update_yaxes(title_text="MACD", row=4, col=1)
-    return fig
-
-
-def get_plotly_cdn_script_tag() -> str:
-    """Returns the exact <script> tag for loading Plotly's JS library from
-    its CDN, matching whatever plotly version is actually installed. Used to
-    load Plotly once in the report's page <head> rather than hardcoding a
-    version number that can silently go stale (a wrong/nonexistent version
-    string here causes a 404 and every chart fails with "Plotly is not
-    defined" -- this generates it from the library itself instead)."""
-    import re
-    probe_html = go.Figure().to_html(full_html=False, include_plotlyjs="cdn")
-    match = re.search(r'<script[^>]*src="https://cdn\.plot\.ly[^"]*"[^>]*></script>', probe_html)
-    if not match:
-        # Extremely unlikely fallback -- if plotly's own CDN embed format
-        # ever changes shape entirely, fail loudly rather than silently.
-        raise RuntimeError("Could not determine Plotly CDN script tag from installed plotly version")
-    return match.group(0)
-
-
-def generate_chart_html(ticker, df, entry=None, stop=None, target=None, include_js=False):
-    """Returns an HTML snippet (a <div> + <script>) for embedding inline in
-    the report. include_js=False (default) assumes Plotly's library is
-    already loaded once via CDN in the page <head> -- much smaller output
-    per chart than embedding the full library on every single one."""
-    fig = build_figure(ticker, df, entry=entry, stop=stop, target=target)
-    return fig.to_html(full_html=False, include_plotlyjs="cdn" if include_js else False,
-                        config={"scrollZoom": True, "displaylogo": False})
-
-
-def generate_chart(ticker, df, entry=None, stop=None, target=None, out_dir="charts"):
-    """CLI/standalone use: saves a self-contained interactive HTML file and
-    returns its path."""
-    os.makedirs(out_dir, exist_ok=True)
-    out_path = os.path.join(out_dir, f"{ticker.replace('.', '_')}.html")
-    fig = build_figure(ticker, df, entry=entry, stop=stop, target=target)
-    fig.write_html(out_path, include_plotlyjs="cdn", config={"scrollZoom": True, "displaylogo": False})
-    return out_path
+    axes[0].legend(loc="upper left", fontsize=8, facecolor="#121824", framealpha=0.3)
+    fig.savefig(out, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.close(fig)
+    print(f"Saved chart to {out}")
 
 
 if __name__ == "__main__":
@@ -219,10 +135,8 @@ if __name__ == "__main__":
     p.add_argument("--stop", type=float, default=None)
     p.add_argument("--target", type=float, default=None)
     p.add_argument("--demo", action="store_true", help="use synthetic data instead of live fetch")
-    p.add_argument("--out", default="candlestick_chart.html")
+    p.add_argument("--out", default="candlestick_chart.png")
     args = p.parse_args()
 
     data = load_data(args.ticker, args.period, demo=args.demo)
-    fig = build_figure(args.ticker, data, entry=args.entry, stop=args.stop, target=args.target)
-    fig.write_html(args.out, include_plotlyjs="cdn", config={"scrollZoom": True, "displaylogo": False})
-    print(f"Saved interactive chart to {args.out}")
+    plot(args.ticker, data, entry=args.entry, stop=args.stop, target=args.target, out=args.out)

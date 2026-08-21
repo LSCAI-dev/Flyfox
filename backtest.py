@@ -153,8 +153,15 @@ def simulate_trade(ind: dict, entry_idx: int, signal: dict, dates) -> dict:
                         exit_price=exit_price, r_achieved=(exit_price - entry) / risk)
 
     exit_price = ind["close"].iloc[end_idx]
-    return dict(exit_idx=end_idx, exit_date=dates[end_idx], exit_reason="Timeout",
-                exit_price=exit_price, r_achieved=(exit_price - entry) / risk)
+    ran_out_of_data = (entry_idx + MAX_HOLD_DAYS) > (n - 1)
+    if ran_out_of_data or pd.isna(exit_price):
+        reason = "Still Open"
+        r_achieved = (exit_price - entry) / risk if not pd.isna(exit_price) else np.nan
+    else:
+        reason = "Timeout"
+        r_achieved = (exit_price - entry) / risk
+    return dict(exit_idx=end_idx, exit_date=dates[end_idx], exit_reason=reason,
+                exit_price=exit_price, r_achieved=r_achieved)
 
 
 def backtest_ticker(ticker: str, hist: pd.DataFrame) -> list:
@@ -244,10 +251,17 @@ if __name__ == "__main__":
     print("Running backtest...")
     trades_df = run_backtest(tickers=tickers, years=args.years, demo=args.demo)
     trades_df.to_csv(args.csv, index=False)
-    print(f"\n{len(trades_df)} total trades. Saved to {args.csv}")
+    print(f"\n{len(trades_df)} total signals. Saved to {args.csv}")
     if len(trades_df):
-        win_rate = (trades_df["r_achieved"] > 0).mean()
-        print(f"Win rate: {win_rate:.1%} | Avg R: {trades_df['r_achieved'].mean():.2f} | Total R: {trades_df['r_achieved'].sum():.1f}")
+        closed = trades_df[trades_df["exit_reason"] != "Still Open"]
+        open_count = len(trades_df) - len(closed)
+        if len(closed):
+            win_rate = (closed["r_achieved"] > 0).mean()
+            print(f"{len(closed)} resolved trades ({open_count} still open, excluded) | "
+                  f"Win rate: {win_rate:.1%} | Avg R: {closed['r_achieved'].mean():.2f} | "
+                  f"Total R: {closed['r_achieved'].sum():.1f}")
+        else:
+            print(f"All {open_count} signal(s) are still open -- no resolved trades yet.")
 
     from backtest_report import build_backtest_report
     build_backtest_report(trades_df, out_path=args.out)

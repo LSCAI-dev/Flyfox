@@ -23,24 +23,27 @@ COLOR_GOLD = "#E8B45C"
 
 
 def _summary_stats(df: pd.DataFrame) -> dict:
-    if len(df) == 0:
-        return dict(total=0, win_rate=0, avg_r=0, total_r=0, max_dd=0, profit_factor=0)
-    wins = df["r_achieved"] > 0
+    open_count = int((df["exit_reason"] == "Still Open").sum()) if len(df) else 0
+    closed = df[df["exit_reason"] != "Still Open"].copy()
+    if len(closed) == 0:
+        return dict(total=0, win_rate=0, avg_r=0, total_r=0, max_dd=0, profit_factor=0, open_count=open_count)
+    wins = closed["r_achieved"] > 0
     win_rate = wins.mean()
-    avg_r = df["r_achieved"].mean()
-    total_r = df["r_achieved"].sum()
-    cum_r = df["r_achieved"].cumsum()
+    avg_r = closed["r_achieved"].mean()
+    total_r = closed["r_achieved"].sum()
+    cum_r = closed["r_achieved"].cumsum()
     running_max = cum_r.cummax()
     drawdown = cum_r - running_max
     max_dd = drawdown.min()
-    gross_win = df.loc[df["r_achieved"] > 0, "r_achieved"].sum()
-    gross_loss = -df.loc[df["r_achieved"] < 0, "r_achieved"].sum()
+    gross_win = closed.loc[closed["r_achieved"] > 0, "r_achieved"].sum()
+    gross_loss = -closed.loc[closed["r_achieved"] < 0, "r_achieved"].sum()
     profit_factor = (gross_win / gross_loss) if gross_loss > 0 else float("inf")
-    return dict(total=len(df), win_rate=win_rate, avg_r=avg_r, total_r=total_r,
-                max_dd=max_dd, profit_factor=profit_factor)
+    return dict(total=len(closed), win_rate=win_rate, avg_r=avg_r, total_r=total_r,
+                max_dd=max_dd, profit_factor=profit_factor, open_count=open_count)
 
 
 def _equity_curve_html(df: pd.DataFrame) -> str:
+    df = df[df["exit_reason"] != "Still Open"]
     cum_r = df["r_achieved"].cumsum()
     colors = [COLOR_BULL if v >= 0 else COLOR_BEAR for v in df["r_achieved"]]
     fig = go.Figure()
@@ -64,6 +67,7 @@ def _equity_curve_html(df: pd.DataFrame) -> str:
 
 
 def _per_stock_rows(df: pd.DataFrame) -> str:
+    df = df[df["exit_reason"] != "Still Open"]
     rows = []
     grouped = df.groupby("ticker")
     summary = grouped.agg(
@@ -82,15 +86,40 @@ def _per_stock_rows(df: pd.DataFrame) -> str:
     return "\n".join(rows)
 
 
+def _per_setup_rows(df: pd.DataFrame) -> str:
+    df = df[df["exit_reason"] != "Still Open"]
+    rows = []
+    grouped = df.groupby("entry_reason")
+    summary = grouped.agg(
+        trades=("r_achieved", "count"),
+        win_rate=("r_achieved", lambda x: (x > 0).mean()),
+        avg_r=("r_achieved", "mean"),
+        total_r=("r_achieved", "sum"),
+    ).sort_values("total_r", ascending=False)
+    for setup, row in summary.iterrows():
+        color = "pos" if row["total_r"] >= 0 else "neg"
+        rows.append(
+            f'<tr><td>{setup}</td><td>{int(row["trades"])}</td>'
+            f'<td>{row["win_rate"]:.0%}</td><td>{row["avg_r"]:.2f}</td>'
+            f'<td class="{color}">{row["total_r"]:+.1f}</td></tr>'
+        )
+    return "\n".join(rows)
+
+
 def _trade_rows(df: pd.DataFrame, max_rows=200) -> str:
     rows = []
     for _, r in df.tail(max_rows).iloc[::-1].iterrows():
-        color = "pos" if r["r_achieved"] >= 0 else "neg"
+        if r["exit_reason"] == "Still Open":
+            r_display = f'{r["r_achieved"]:+.2f} (unrealized)' if pd.notna(r["r_achieved"]) else "—"
+            color = "open"
+        else:
+            color = "pos" if r["r_achieved"] >= 0 else "neg"
+            r_display = f'{r["r_achieved"]:+.2f}'
         rows.append(
             f'<tr><td>{r["entry_date"].date() if hasattr(r["entry_date"], "date") else r["entry_date"]}</td>'
             f'<td>{r["ticker"]}</td><td>{r["entry_reason"]}</td>'
             f'<td>{r["entry"]:.3f}</td><td>{r["stop"]:.3f}</td><td>{r["target"]:.3f}</td>'
-            f'<td>{r["exit_reason"]}</td><td class="{color}">{r["r_achieved"]:+.2f}</td></tr>'
+            f'<td>{r["exit_reason"]}</td><td class="{color}">{r_display}</td></tr>'
         )
     return "\n".join(rows)
 
@@ -134,6 +163,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   .stat-lbl {{ font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px; }}
   .pos {{ color: var(--bull); }}
   .neg {{ color: var(--risk); }}
+  .open {{ color: var(--gold); }}
 
   .card {{ background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 22px 24px; margin-bottom: 20px; }}
   .card h2 {{ font-family: 'Space Grotesk', sans-serif; font-size: 16px; margin: 0 0 14px; }}
@@ -156,6 +186,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="eyebrow">SGX Screener · Backtest</div>
   <h1>Technical Rules Backtest</h1>
   <p class="subtitle">EMA uptrend + MACD gate + entry/stop/target logic, replayed against historical price data — generated {date}</p>
+  <p class="subtitle" style="margin-top:-18px;">{open_note}</p>
 
   <div class="stat-grid">
     <div class="stat-card"><div class="stat-num">{total}</div><div class="stat-lbl">Total Trades</div></div>
@@ -169,6 +200,14 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <div class="card">
     <h2>Equity Curve (Cumulative R)</h2>
     {equity_html}
+  </div>
+
+  <div class="card">
+    <h2>Breakdown by Setup Type</h2>
+    <table>
+      <tr><th>Setup</th><th>Trades</th><th>Win Rate</th><th>Avg R</th><th>Total R</th></tr>
+      {per_setup_rows}
+    </table>
   </div>
 
   <div class="card">
@@ -214,24 +253,32 @@ def build_backtest_report(df: pd.DataFrame, out_path: str = "backtest_report.htm
     sgt_now = dt.datetime.now(ZoneInfo("Asia/Singapore"))
     generated_str = sgt_now.strftime("%d %b %Y, %I:%M %p SGT").replace(", 0", ", ")
 
+    open_count = stats.get("open_count", 0)
+    open_note = (f"{open_count} signal(s) are still-open positions (too recent to have resolved yet) "
+                 f"and are excluded from every stat below." if open_count else
+                 "No open positions at the time of this run -- every signal has resolved.")
+
     if len(df) == 0:
         equity_html = '<p style="color:var(--muted)">No trades were generated over this period.</p>'
         per_stock_rows = ""
+        per_setup_rows = ""
         trade_rows = ""
         pf_display = "—"
     else:
         equity_html = _equity_curve_html(df)
         per_stock_rows = _per_stock_rows(df)
+        per_setup_rows = _per_setup_rows(df)
         trade_rows = _trade_rows(df)
         pf_display = f"{stats['profit_factor']:.2f}" if np.isfinite(stats['profit_factor']) else "∞"
 
     html = PAGE_TEMPLATE.format(
-        date=generated_str,
+        date=generated_str, open_note=open_note,
         total=stats["total"], win_rate=stats["win_rate"],
         avg_r=stats["avg_r"], avg_r_class="pos" if stats["avg_r"] >= 0 else "neg",
         total_r=stats["total_r"], total_r_class="pos" if stats["total_r"] >= 0 else "neg",
         max_dd=stats["max_dd"], profit_factor=pf_display,
-        equity_html=equity_html, per_stock_rows=per_stock_rows, trade_rows=trade_rows,
+        equity_html=equity_html, per_stock_rows=per_stock_rows,
+        per_setup_rows=per_setup_rows, trade_rows=trade_rows,
         plotly_cdn_tag=cg.get_plotly_cdn_script_tag(),
     )
     with open(out_path, "w") as f:

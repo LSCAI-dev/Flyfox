@@ -101,6 +101,12 @@ def check_signal(ind: dict, t: int) -> dict | None:
     near_support = current_close <= support_level * (1 + s.SUPPORT_ZONE_PCT)
 
     if near_resistance:
+        avg_vol20 = ind["avg_vol20"].iloc[t]
+        today_vol = ind["volume"].iloc[t]
+        rel_vol = today_vol / avg_vol20 if avg_vol20 and avg_vol20 > 0 else np.nan
+        volume_confirmed = not np.isnan(rel_vol) and rel_vol >= s.VOLUME_SURGE_MULT
+        if not volume_confirmed:
+            return None  # breakout without volume confirmation is rejected, matching production
         breakout_trigger = swing_high * (1 + s.BREAKOUT_TRIGGER_BUFFER)
         entry = max(current_close, breakout_trigger)
         reason = "Breakout"

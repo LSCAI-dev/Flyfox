@@ -345,14 +345,19 @@ def apply_ta_filters(res: StockResult, hist: pd.DataFrame):
     near_support = current_close <= support_level * (1 + SUPPORT_ZONE_PCT)
 
     if near_resistance:
+        volume_confirmed = not np.isnan(res.rel_vol) and res.rel_vol >= VOLUME_SURGE_MULT
+        if not volume_confirmed:
+            res.notes = (f"Rejected: breakout setup needs volume confirmation "
+                         f"(rel vol >= {VOLUME_SURGE_MULT}x), not present")
+            return
         breakout_trigger = swing_high * (1 + BREAKOUT_TRIGGER_BUFFER)
         entry = max(current_close, breakout_trigger)
         if entry > current_close:
             res.entry_reason = (f"Breakout entry: buy-stop just above {RESISTANCE_LOOKBACK}-session "
-                                 f"resistance at {swing_high:.3f}")
+                                 f"resistance at {swing_high:.3f}, confirmed by volume ({res.rel_vol:.1f}x avg)")
         else:
             res.entry_reason = (f"Breakout entry: price already clear of {RESISTANCE_LOOKBACK}-session "
-                                 f"resistance at {swing_high:.3f}, confirmed with volume")
+                                 f"resistance at {swing_high:.3f}, confirmed by volume ({res.rel_vol:.1f}x avg)")
     elif near_support:
         entry = current_close
         support_desc = f"rising {EMA_FAST}-EMA" if support_is_ema else f"recent swing low over the last {SWING_LOW_LOOKBACK} sessions"

@@ -48,22 +48,22 @@ SGX_UNIVERSE = [
     "A17U.SI", # CapitaLand Ascendas REIT
     "S68.SI",  # SGX itself
     "C09.SI",  # City Developments
-    "F34.SI",  # Wilmar International
-    "Y92.SI",  # Thai Beverage
     "BN4.SI",  # Keppel Ltd
-    "G13.SI",  # Genting Singapore
     "S63.SI",  # ST Engineering
     "V03.SI",  # Venture Corp
     "H78.SI",  # Hongkong Land
     "M44U.SI", # Mapletree Logistics Trust
     "N2IU.SI", # Mapletree Pan Asia Commercial Trust
     "ME8U.SI", # Mapletree Industrial Trust
-    "U96.SI",  # Sembcorp Industries
     "9CI.SI",  # CapitaLand Investment
     "BS6.SI",  # Yangzijiang Shipbuilding
     "5E2.SI",  # Seatrium
     "U14.SI",  # UOL Group
-    "AJBU.SI", # Keppel DC REIT
+    # Removed after backtest confirmed persistent negative R across multiple
+    # setup types (not just weak breakouts): F34.SI (Wilmar), Y92.SI (Thai
+    # Beverage), G13.SI (Genting S'pore), U96.SI (Sembcorp), AJBU.SI (Keppel
+    # DC REIT). Re-add and re-backtest if you want to double-check any of
+    # these later -- removal was based on real historical data, not a guess.
 ]
 
 # ---------------------------------------------------------------------------

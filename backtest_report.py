@@ -187,6 +187,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
   <h1>Technical Rules Backtest</h1>
   <p class="subtitle">EMA uptrend + MACD gate + entry/stop/target logic, replayed against historical price data — generated {date}</p>
   <p class="subtitle" style="margin-top:-18px;">{open_note}</p>
+  <a href="archive/index.html" style="display:inline-block; margin-bottom:24px; color:var(--muted); font-size:12.5px; text-decoration:none;">View past runs &rarr;</a>
 
   <div class="stat-grid">
     <div class="stat-card"><div class="stat-num">{total}</div><div class="stat-lbl">Total Trades</div></div>

@@ -326,6 +326,7 @@ PAGE_TEMPLATE = """<!DOCTYPE html>
       <div class="summary-item"><div class="summary-num">{avg_rr:.1f}</div><div class="summary-lbl">Avg R:R</div></div>
       <div class="summary-item"><div class="summary-num">2:1</div><div class="summary-lbl">Min R:R filter</div></div>
     </div>
+    <a href="archive/index.html" style="display:inline-block; margin-top:18px; color:var(--muted); font-size:12.5px; text-decoration:none;">View past reports &rarr;</a>
   </header>
 
   {cards}

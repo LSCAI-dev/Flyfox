@@ -2,8 +2,8 @@ name: Daily SGX Watchlist
 
 on:
   schedule:
-    # Runs hourly, 00:00-09:00 UTC = 8:00am-5:00pm SGT, Mon-Fri
-    - cron: "0 0-9 * * 1-5"
+    # Runs 12:00 UTC = 8:00pm SGT, Mon-Fri (after SGX market close)
+    - cron: "0 12 * * 1-5"
   workflow_dispatch: {}        # lets you trigger it manually from the Actions tab
 
 permissions:
@@ -32,10 +32,16 @@ jobs:
           mkdir -p docs
           python report_generator.py --out docs/index.html
 
+      - name: Archive dated snapshot
+        run: |
+          mkdir -p docs/archive
+          cp docs/index.html "docs/archive/watchlist-$(date -u +'%Y-%m-%d').html"
+          python build_archive_index.py --archive-dir docs/archive
+
       - name: Commit and push report
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add docs/index.html sgx_watchlist.csv
+          git add docs/index.html docs/archive sgx_watchlist.csv
           git diff --quiet --cached || git commit -m "SGX watchlist update $(date -u +'%Y-%m-%d %H:%M UTC')"
           git push
